@@ -1,0 +1,8 @@
+/bootstrap/cache
+/data
+/node_modules
+/public
+/storage
+/vendor
+composer.lock
+package-lock.json

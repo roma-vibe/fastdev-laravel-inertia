@@ -1,0 +1,438 @@
+schema = 1
+id = "laravel-inertia"
+name = "Laravel + Inertia"
+description = "A Laravel 13 web app with an Inertia frontend: pick Vue or React, Tailwind CSS, Bootstrap or plain CSS, and SQLite, PostgreSQL or MySQL when you create the project. A Notes example goes through every layer (route, controller, form request, service, model, migration, Inertia page and components), with feature tests and one zero-warning `check` that runs Pint, Larastan, PHPUnit, ESLint, Prettier and the TypeScript compiler. Everything can run in Docker (the default), so PHP and Composer are not needed on the Mac."
+category = "web"
+languages = ["php", "node"]
+tags = [
+  "laravel",
+  "inertia",
+  "php",
+  "fullstack",
+  "typescript",
+  "vue",
+  "react",
+  "tailwind",
+  "bootstrap",
+  "sqlite",
+  "postgres",
+  "mysql",
+  "docker",
+  "frankenphp",
+]
+stack = [
+  "PHP 8.4+ (Docker: PHP 8.5, FrankenPHP)",
+  "Laravel 13",
+  "Inertia 3",
+  "Vue 3.5 or React 19",
+  "TypeScript 6",
+  "Vite 8",
+  "Tailwind CSS 4, Bootstrap 5 or plain CSS",
+  "SQLite, PostgreSQL 18 or MySQL 8.4",
+  "PHPUnit 12, Larastan 3, Pint",
+  "ESLint 10, Prettier 3",
+]
+
+[requirements]
+php = ">=8.4"
+composer = ">=2"
+node = ">=24"
+
+[env]
+APP_NAME = "{{ project.name }}"
+APP_URL = "http://localhost:{{ ports.APP_PORT }}"
+
+[ports]
+APP_PORT = 8000
+VITE_PORT = 5173
+
+[[set]]
+file = "package.json"
+path = ["name"]
+value = "{{ project.slug }}"
+
+[[set]]
+file = "package-lock.json"
+path = ["name"]
+value = "{{ project.slug }}"
+
+[[set]]
+file = "package-lock.json"
+path = ["packages", "", "name"]
+value = "{{ project.slug }}"
+
+# Setup and commands below are for development on this machine with SQLite. Selected options are
+# applied in the order the choices are declared (fastDev's defined behaviour), which covers the
+# database × docker combinations: `database` comes first and its PostgreSQL/MySQL options set the
+# steps for `docker = "run"` (start the `db` container, then migrate from this machine); `docker`
+# comes after it, so `none` restores the plain host steps and `full` replaces everything with
+# `docker compose run --rm dev …`. `run` sets no steps of its own and keeps the database's.
+
+[[setup]]
+label = "Install PHP dependencies"
+run = "composer install --no-interaction --no-progress"
+
+[[setup]]
+label = "Install Node dependencies"
+run = "npm ci"
+
+[[setup]]
+label = "Generate the app key"
+run = "php artisan key:generate --no-interaction"
+
+[[setup]]
+label = "Prepare the database"
+run = "php artisan migrate --force --no-interaction"
+
+[commands.dev]
+label = "Dev"
+description = "PHP server and Vite with hot reload."
+run = "composer dev"
+long = true
+url = "http://localhost:${APP_PORT}"
+primary = true
+
+[commands.build]
+label = "Build"
+description = "Production build of the frontend into public/build."
+run = "npm run build"
+
+[commands.test]
+label = "Test"
+run = "composer test"
+
+[commands.check]
+label = "Check"
+description = "Pint, Larastan, PHPUnit, ESLint, Prettier and the TypeScript compiler."
+run = "composer check"
+
+[commands.format]
+label = "Format"
+description = "Fix formatting with Pint, ESLint and Prettier."
+run = "composer format"
+
+[commands.migrate]
+label = "Migrate DB"
+run = "php artisan migrate"
+
+# ---------------------------------------------------------------------------
+# The stack
+# ---------------------------------------------------------------------------
+
+[choices.frontend]
+label = "Frontend"
+description = "The framework of the Inertia pages."
+default = "vue"
+
+[choices.frontend.options.vue]
+label = "Vue"
+description = "Vue 3 single-file components with <script setup> and TypeScript."
+
+[choices.frontend.options.react]
+label = "React"
+description = "React 19 function components in TypeScript (TSX)."
+
+[choices.css]
+label = "Styles"
+description = "How the pages are styled. The pages use the same class names with every option."
+default = "tailwind"
+
+[choices.css.options.tailwind]
+label = "Tailwind CSS"
+description = "Tailwind CSS 4: utility classes, with the shared building blocks defined as component classes."
+
+[choices.css.options.bootstrap]
+label = "Bootstrap"
+description = "Bootstrap 5 components and utilities (CSS only)."
+
+[choices.css.options.none]
+label = "Plain CSS"
+description = "One hand-written stylesheet with CSS variables, no CSS framework."
+
+[choices.database]
+label = "Database"
+description = "The database of the app. Tests always run on an in-memory SQLite database."
+default = "sqlite"
+
+[choices.database.options.sqlite]
+label = "SQLite"
+description = "A file in data/; nothing to install or run."
+env = { DB_CONNECTION = "sqlite", DB_DATABASE = "data/database.sqlite" }
+
+[choices.database.options.postgres]
+label = "PostgreSQL"
+description = "PostgreSQL 18 runs in a Docker container; without Docker, use your own server and set the credentials in .env."
+
+# The database container's port on this machine (only allocated with this option).
+[choices.database.options.postgres.ports]
+FORWARD_DB_PORT = 5432
+
+[choices.database.options.postgres.env]
+DB_CONNECTION = "pgsql"
+# Where PHP runs: this machine, or (everything in Docker) the dev and app containers.
+DB_HOST = "{% if choices.docker == 'full' %}db{% else %}127.0.0.1{% endif %}"
+DB_PORT = "{% if choices.docker == 'run' %}{{ ports.FORWARD_DB_PORT }}{% else %}5432{% endif %}"
+DB_DATABASE = "{{ project.slug | replace('-', '_') }}"
+DB_USERNAME = "{% if choices.docker == 'none' %}postgres{% else %}laravel{% endif %}"
+DB_PASSWORD = "{% if choices.docker != 'none' %}password{% endif %}"
+
+[choices.database.options.postgres.commands]
+dev = { run = "docker compose up -d --wait db && composer dev" }
+migrate = { run = "docker compose up -d --wait db && php artisan migrate" }
+
+[[choices.database.options.postgres.setup]]
+label = "Install PHP dependencies"
+run = "composer install --no-interaction --no-progress"
+
+[[choices.database.options.postgres.setup]]
+label = "Install Node dependencies"
+run = "npm ci"
+
+[[choices.database.options.postgres.setup]]
+label = "Generate the app key"
+run = "php artisan key:generate --no-interaction"
+
+[[choices.database.options.postgres.setup]]
+label = "Start the database"
+run = "docker compose up -d --wait db"
+
+[[choices.database.options.postgres.setup]]
+label = "Prepare the database"
+run = "php artisan migrate --force --no-interaction"
+
+[choices.database.options.mysql]
+label = "MySQL"
+description = "MySQL 8.4 runs in a Docker container; without Docker, use your own server and set the credentials in .env."
+
+# The database container's port on this machine (only allocated with this option).
+[choices.database.options.mysql.ports]
+FORWARD_DB_PORT = 3306
+
+[choices.database.options.mysql.env]
+DB_CONNECTION = "mysql"
+# Where PHP runs: this machine, or (everything in Docker) the dev and app containers.
+DB_HOST = "{% if choices.docker == 'full' %}db{% else %}127.0.0.1{% endif %}"
+DB_PORT = "{% if choices.docker == 'run' %}{{ ports.FORWARD_DB_PORT }}{% else %}3306{% endif %}"
+DB_DATABASE = "{{ project.slug | replace('-', '_') }}"
+DB_USERNAME = "{% if choices.docker == 'none' %}root{% else %}laravel{% endif %}"
+DB_PASSWORD = "{% if choices.docker != 'none' %}password{% endif %}"
+
+[choices.database.options.mysql.commands]
+dev = { run = "docker compose up -d --wait db && composer dev" }
+migrate = { run = "docker compose up -d --wait db && php artisan migrate" }
+
+[[choices.database.options.mysql.setup]]
+label = "Install PHP dependencies"
+run = "composer install --no-interaction --no-progress"
+
+[[choices.database.options.mysql.setup]]
+label = "Install Node dependencies"
+run = "npm ci"
+
+[[choices.database.options.mysql.setup]]
+label = "Generate the app key"
+run = "php artisan key:generate --no-interaction"
+
+[[choices.database.options.mysql.setup]]
+label = "Start the database"
+run = "docker compose up -d --wait db"
+
+[[choices.database.options.mysql.setup]]
+label = "Prepare the database"
+run = "php artisan migrate --force --no-interaction"
+
+# ---------------------------------------------------------------------------
+# Docker: how the project uses containers (the standard modes of every skeleton)
+# ---------------------------------------------------------------------------
+
+[choices.docker]
+label = "Docker"
+description = "How the project uses Docker."
+default = "full"
+
+[choices.docker.options.none]
+label = "No Docker"
+description = "Everything runs on this Mac: PHP 8.4+, Composer and Node.js 24+ are required; PostgreSQL or MySQL must be your own server."
+
+[choices.docker.options.none.commands]
+dev = { run = "composer dev" }
+migrate = { run = "php artisan migrate" }
+
+[[choices.docker.options.none.setup]]
+label = "Install PHP dependencies"
+run = "composer install --no-interaction --no-progress"
+
+[[choices.docker.options.none.setup]]
+label = "Install Node dependencies"
+run = "npm ci"
+
+[[choices.docker.options.none.setup]]
+label = "Generate the app key"
+run = "php artisan key:generate --no-interaction"
+
+# --graceful: a database server that is not set up yet does not fail the setup.
+[[choices.docker.options.none.setup]]
+label = "Prepare the database"
+run = "php artisan migrate --force --graceful --no-interaction"
+
+[choices.docker.options.run]
+label = "Docker to run the app"
+description = "Develop on this Mac with PHP, Composer and Node.js; Docker runs the production image (FrankenPHP) and the PostgreSQL or MySQL server."
+requirements = { docker = ">=24" }
+env = { COMPOSE_PROJECT_NAME = "{{ project.slug }}" }
+cleanup = "docker compose --profile dev down --volumes --remove-orphans --rmi local"
+
+[choices.docker.options.run.commands.docker-up]
+label = "Docker up"
+description = "Build and run the production container."
+run = "docker compose up --build"
+long = true
+url = "http://localhost:${APP_PORT}"
+
+[choices.docker.options.run.commands.docker-down]
+label = "Docker down"
+run = "docker compose down"
+
+[choices.docker.options.run.commands.docker-logs]
+label = "Docker logs"
+run = "docker compose logs -f"
+long = true
+
+[choices.docker.options.run.commands.docker-build]
+label = "Docker build"
+run = "docker compose build app"
+
+[choices.docker.options.full]
+label = "Everything in Docker"
+description = "PHP, Composer, Node.js, the dev server, tests and the database run in containers; only Docker is needed on this Mac."
+requirements = { docker = ">=24" }
+drop_requirements = ["php", "composer", "node"]
+env = { COMPOSE_PROJECT_NAME = "{{ project.slug }}" }
+cleanup = "docker compose --profile dev down --volumes --remove-orphans --rmi local"
+preview = { message = "Everything runs in Docker. Open the link: the header shows the project name and the Notes page is the example feature — add and delete a few notes. Edit a page in resources/js/Pages to see hot reload. Stop the preview when you are done." }
+
+[[choices.docker.options.full.setup]]
+label = "Build the dev image"
+run = "docker compose build dev"
+
+[[choices.docker.options.full.setup]]
+label = "Install PHP dependencies"
+run = "docker compose run --rm dev composer install --no-interaction --no-progress"
+
+[[choices.docker.options.full.setup]]
+label = "Install Node dependencies"
+run = "docker compose run --rm dev npm ci"
+
+[[choices.docker.options.full.setup]]
+label = "Generate the app key"
+run = "docker compose run --rm dev php artisan key:generate --no-interaction"
+
+[[choices.docker.options.full.setup]]
+label = "Prepare the database"
+run = "docker compose run --rm dev php artisan migrate --force --no-interaction"
+
+[choices.docker.options.full.commands]
+dev = { run = "docker compose up dev" }
+build = { run = "docker compose run --rm dev npm run build" }
+test = { run = "docker compose run --rm dev composer test" }
+check = { run = "docker compose run --rm dev composer check" }
+format = { run = "docker compose run --rm dev composer format" }
+migrate = { run = "docker compose run --rm dev php artisan migrate" }
+docker-up = { label = "Docker up", description = "Build and run the production container.", run = "docker compose up --build app", long = true, url = "http://localhost:${APP_PORT}" }
+docker-down = { label = "Docker down", run = "docker compose --profile dev down" }
+docker-logs = { label = "Docker logs", run = "docker compose --profile dev logs -f", long = true }
+docker-build = { label = "Docker build", run = "docker compose build app" }
+
+[choices.data]
+label = "Data storage"
+description = "Where containers keep the database."
+default = "volume"
+when = { docker = ["run", "full"] }
+
+[choices.data.options.volume]
+label = "Docker volume"
+description = "Managed by Docker, survives container rebuilds; `docker compose down -v` deletes it."
+env = { DOCKER_DATA = "data" }
+
+[choices.data.options.local]
+label = "Project folder"
+description = "The data/ folder of the project is mounted into the containers; easy to inspect and back up."
+env = { DOCKER_DATA = "./data" }
+
+[verify]
+commands = ["check", "build", "docker-build"]
+# The default selection (Vue, Tailwind CSS, SQLite, everything in Docker) runs first. The last two
+# variants develop on the host and need PHP 8.4+, Composer and Node.js 24+ there.
+variants = [
+  { frontend = "react", css = "bootstrap", database = "postgres" },
+  { frontend = "vue", css = "none", database = "mysql", data = "local" },
+  { frontend = "react", css = "tailwind", database = "postgres", docker = "run", data = "local" },
+  { frontend = "vue", css = "bootstrap", docker = "none" },
+]
+
+[preview]
+command = "dev"
+message = "Open the link: the header shows the project name and the Notes page is the example feature — add and delete a few notes. Edit a page in resources/js/Pages to see hot reload. Stop the preview when you are done."
+
+[translations.ru]
+"Laravel + Inertia" = "Laravel + Inertia"
+"A Laravel 13 web app with an Inertia frontend: pick Vue or React, Tailwind CSS, Bootstrap or plain CSS, and SQLite, PostgreSQL or MySQL when you create the project. A Notes example goes through every layer (route, controller, form request, service, model, migration, Inertia page and components), with feature tests and one zero-warning `check` that runs Pint, Larastan, PHPUnit, ESLint, Prettier and the TypeScript compiler. Everything can run in Docker (the default), so PHP and Composer are not needed on the Mac." = "Веб-приложение на Laravel 13 с фронтендом на Inertia: при создании проекта выбираются Vue или React, Tailwind CSS, Bootstrap или обычный CSS, а также SQLite, PostgreSQL или MySQL. Пример «Заметки» проходит через все слои (маршрут, контроллер, form request, сервис, модель, миграция, страница Inertia и компоненты), есть feature-тесты и одна команда `check` без предупреждений: Pint, Larastan, PHPUnit, ESLint, Prettier и компилятор TypeScript. Всё может работать в Docker (по умолчанию), поэтому PHP и Composer на Mac не нужны."
+"Install PHP dependencies" = "Установка PHP-зависимостей"
+"Install Node dependencies" = "Установка Node-зависимостей"
+"Generate the app key" = "Генерация ключа приложения"
+"Prepare the database" = "Подготовка базы данных"
+"Start the database" = "Запуск базы данных"
+"Build the dev image" = "Сборка образа для разработки"
+"Dev" = "Dev"
+"PHP server and Vite with hot reload." = "PHP-сервер и Vite с горячей перезагрузкой."
+"Build" = "Сборка"
+"Production build of the frontend into public/build." = "Продакшен-сборка фронтенда в public/build."
+"Test" = "Тесты"
+"Check" = "Проверка"
+"Pint, Larastan, PHPUnit, ESLint, Prettier and the TypeScript compiler." = "Pint, Larastan, PHPUnit, ESLint, Prettier и компилятор TypeScript."
+"Format" = "Форматирование"
+"Fix formatting with Pint, ESLint and Prettier." = "Исправить форматирование с помощью Pint, ESLint и Prettier."
+"Migrate DB" = "Миграции БД"
+"Frontend" = "Фронтенд"
+"The framework of the Inertia pages." = "Фреймворк страниц Inertia."
+"Vue" = "Vue"
+"Vue 3 single-file components with <script setup> and TypeScript." = "Однофайловые компоненты Vue 3 с <script setup> и TypeScript."
+"React" = "React"
+"React 19 function components in TypeScript (TSX)." = "Функциональные компоненты React 19 на TypeScript (TSX)."
+"Styles" = "Стили"
+"How the pages are styled. The pages use the same class names with every option." = "Как оформлены страницы. При любом варианте страницы используют одни и те же имена классов."
+"Tailwind CSS" = "Tailwind CSS"
+"Tailwind CSS 4: utility classes, with the shared building blocks defined as component classes." = "Tailwind CSS 4: утилитарные классы, общие элементы оформлены как классы компонентов."
+"Bootstrap" = "Bootstrap"
+"Bootstrap 5 components and utilities (CSS only)." = "Компоненты и утилиты Bootstrap 5 (только CSS)."
+"Plain CSS" = "Обычный CSS"
+"One hand-written stylesheet with CSS variables, no CSS framework." = "Одна написанная вручную таблица стилей с CSS-переменными, без CSS-фреймворка."
+"Database" = "База данных"
+"The database of the app. Tests always run on an in-memory SQLite database." = "База данных приложения. Тесты всегда выполняются на SQLite в памяти."
+"SQLite" = "SQLite"
+"A file in data/; nothing to install or run." = "Файл в data/; ничего не нужно устанавливать и запускать."
+"PostgreSQL" = "PostgreSQL"
+"PostgreSQL 18 runs in a Docker container; without Docker, use your own server and set the credentials in .env." = "PostgreSQL 18 работает в контейнере Docker; без Docker используйте свой сервер и укажите параметры подключения в .env."
+"MySQL" = "MySQL"
+"MySQL 8.4 runs in a Docker container; without Docker, use your own server and set the credentials in .env." = "MySQL 8.4 работает в контейнере Docker; без Docker используйте свой сервер и укажите параметры подключения в .env."
+"Docker" = "Docker"
+"How the project uses Docker." = "Как проект использует Docker."
+"No Docker" = "Без Docker"
+"Everything runs on this Mac: PHP 8.4+, Composer and Node.js 24+ are required; PostgreSQL or MySQL must be your own server." = "Всё работает на этом Mac: нужны PHP 8.4+, Composer и Node.js 24+; PostgreSQL или MySQL — ваш собственный сервер."
+"Docker to run the app" = "Docker для запуска"
+"Develop on this Mac with PHP, Composer and Node.js; Docker runs the production image (FrankenPHP) and the PostgreSQL or MySQL server." = "Разработка на этом Mac с PHP, Composer и Node.js; Docker запускает продакшен-образ (FrankenPHP) и сервер PostgreSQL или MySQL."
+"Docker up" = "Docker up"
+"Build and run the production container." = "Собрать и запустить продакшен-контейнер."
+"Docker down" = "Docker down"
+"Docker logs" = "Docker logs"
+"Docker build" = "Docker build"
+"Everything in Docker" = "Всё в Docker"
+"PHP, Composer, Node.js, the dev server, tests and the database run in containers; only Docker is needed on this Mac." = "PHP, Composer, Node.js, dev-сервер, тесты и база данных работают в контейнерах; на этом Mac нужен только Docker."
+"Everything runs in Docker. Open the link: the header shows the project name and the Notes page is the example feature — add and delete a few notes. Edit a page in resources/js/Pages to see hot reload. Stop the preview when you are done." = "Всё работает в Docker. Откройте ссылку: в шапке — имя проекта, страница Notes — пример функции: добавьте и удалите несколько заметок. Измените страницу в resources/js/Pages, чтобы увидеть горячую перезагрузку. Остановите превью, когда закончите."
+"Data storage" = "Хранение данных"
+"Where containers keep the database." = "Где контейнеры хранят базу данных."
+"Docker volume" = "Том Docker"
+"Managed by Docker, survives container rebuilds; `docker compose down -v` deletes it." = "Управляется Docker, переживает пересборку контейнеров; `docker compose down -v` удаляет его."
+"Project folder" = "Папка проекта"
+"The data/ folder of the project is mounted into the containers; easy to inspect and back up." = "Папка data/ проекта монтируется в контейнеры; её легко просматривать и копировать."
+"Open the link: the header shows the project name and the Notes page is the example feature — add and delete a few notes. Edit a page in resources/js/Pages to see hot reload. Stop the preview when you are done." = "Откройте ссылку: в шапке — имя проекта, страница Notes — пример функции: добавьте и удалите несколько заметок. Измените страницу в resources/js/Pages, чтобы увидеть горячую перезагрузку. Остановите превью, когда закончите."

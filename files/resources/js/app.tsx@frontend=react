@@ -1,0 +1,23 @@
+import { createInertiaApp } from '@inertiajs/react';
+import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
+import type { ComponentType } from 'react';
+import AppLayout from '@/Layouts/AppLayout';
+
+void createInertiaApp({
+    // "Notes · My App": appName is shared by HandleInertiaRequests (APP_NAME in .env).
+    title: (title, page) => {
+        const appName = typeof page.props.appName === 'string' ? page.props.appName : '';
+        return title ? `${title} · ${appName}` : appName;
+    },
+    // resources/js/Pages/<Name>.tsx, loaded on demand (one chunk per page).
+    resolve: async (name) => {
+        const page = await resolvePageComponent(
+            `./Pages/${name}.tsx`,
+            import.meta.glob<{ default: ComponentType }>('./Pages/**/*.tsx'),
+        );
+        return page.default;
+    },
+    // Every page renders inside AppLayout, which stays mounted between visits.
+    layout: () => AppLayout,
+    progress: { color: '#4f46e5' },
+});

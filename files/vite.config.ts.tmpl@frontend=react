@@ -1,0 +1,31 @@
+{% if choices.css == "tailwind" %}import tailwindcss from '@tailwindcss/vite';
+{% endif %}import react from '@vitejs/plugin-react';
+import laravel from 'laravel-vite-plugin';
+import { defineConfig, loadEnv } from 'vite';
+
+export default defineConfig(({ mode }) => {
+    // The project's .env; variables of the process (e.g. set by Docker Compose) take precedence.
+    const env = loadEnv(mode, process.cwd(), '');
+
+    return {
+        plugins: [
+            laravel({
+                input: ['resources/css/app.css', 'resources/js/app.tsx'],
+                refresh: true,
+            }),
+{% if choices.css == "tailwind" %}            tailwindcss(),
+{% endif %}            react(),
+        ],
+        server: {
+            host: env.VITE_HOST || 'localhost',
+            port: Number(env.VITE_PORT) || 5173,
+            strictPort: true,
+            // The browser loads assets from localhost, also when Vite runs in a container.
+            hmr: { host: 'localhost' },
+            watch: {
+                // Runtime data must not trigger reloads.
+                ignored: ['**/data/**', '**/storage/**', '**/vendor/**', '**/bootstrap/cache/**'],
+            },
+        },
+    };
+});

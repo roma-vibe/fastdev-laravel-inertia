@@ -1,0 +1,82 @@
+@import 'bootstrap/dist/css/bootstrap.css';
+
+/*
+ * Bootstrap 5 provides the building blocks (container, navbar, card, btn, form-control, alert…);
+ * the rules below only add the app's own layout, using Bootstrap's CSS variables. For a dark theme,
+ * set data-bs-theme="dark" on <html> (see Bootstrap's "Color modes").
+ */
+
+body {
+    background-color: var(--bs-tertiary-bg);
+}
+
+.app-header {
+    border-bottom: 1px solid var(--bs-border-color);
+    background-color: var(--bs-body-bg);
+}
+
+.app-main {
+    padding-block: 2rem;
+}
+
+.page-header {
+    margin-bottom: 1.5rem;
+}
+
+.page-header p {
+    margin-bottom: 0;
+    color: var(--bs-secondary-color);
+}
+
+.field {
+    margin-bottom: 1rem;
+}
+
+.notes-layout {
+    display: grid;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+@media (min-width: 768px) {
+    .notes-layout {
+        grid-template-columns: 20rem 1fr;
+    }
+}
+
+.note-list {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.note-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.card-title:not(h1) {
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.card-text {
+    white-space: pre-line;
+}
+
+.note-date {
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color);
+}
+
+.empty-state {
+    padding: 2rem;
+    border: 1px dashed var(--bs-border-color);
+    border-radius: var(--bs-border-radius-lg);
+    text-align: center;
+    color: var(--bs-secondary-color);
+}

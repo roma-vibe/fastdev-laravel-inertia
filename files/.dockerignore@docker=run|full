@@ -1,0 +1,25 @@
+# Keep the build context small; never ship local secrets, data or dependencies.
+.git
+.env
+.env.*
+!.env.example
+/vendor
+/node_modules
+/public/build
+/public/hot
+/data
+/storage/logs/*
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/framework/testing/*
+/storage/inertia-devtools
+/bootstrap/cache/*.php
+.phpunit.cache
+*.log
+.DS_Store
+.idea
+.vscode
+Dockerfile
+docker-compose.yml
+.dockerignore

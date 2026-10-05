@@ -1,0 +1,123 @@
+# Reads the project's .env: COMPOSE_PROJECT_NAME names the containers, volumes and images; the
+# published ports are APP_PORT{% if choices.docker == "full" %}, VITE_PORT{% endif %}{% if choices.database != "sqlite" %} and FORWARD_DB_PORT{% endif %}; DOCKER_DATA selects where the {% if choices.database == "sqlite" %}SQLite database{% elif choices.database == "postgres" %}PostgreSQL data{% else %}MySQL data{% endif %}
+# is kept ("data" = a named volume, "./data" = the project's data/ folder).
+{%- if choices.docker == "full" %}
+# Everything runs in containers: `docker compose up dev` for development with hot reload,
+# `docker compose run --rm dev <command>` for any other command (composer, npm, php artisan),
+# `docker compose up --build app` for the production container.
+{%- else %}
+# Development happens on this machine; `docker compose up --build` runs the production container
+{%- if choices.database != "sqlite" %} and the
+# database, `docker compose up -d --wait db` only the database (the Dev command does that)
+{%- endif %}.
+{%- endif %}
+services:
+  app:
+    build:
+      context: .
+    env_file: .env
+    environment:
+      APP_ENV: production
+      APP_DEBUG: 'false'
+{%- if choices.docker == "run" and choices.database == "postgres" %}
+      # .env points this machine at the published port; the container reaches the service directly.
+      DB_HOST: db
+      DB_PORT: '5432'
+{%- elif choices.docker == "run" and choices.database == "mysql" %}
+      # .env points this machine at the published port; the container reaches the service directly.
+      DB_HOST: db
+      DB_PORT: '3306'
+{%- endif %}
+    ports:
+      - '${APP_PORT:-8000}:8080'
+{%- if choices.database == "sqlite" %}
+    volumes:
+      # The SQLite database (DB_DATABASE=data/database.sqlite).
+      - ${DOCKER_DATA:-data}:/app/data
+{%- else %}
+    depends_on:
+      db:
+        condition: service_healthy
+{%- endif %}
+    restart: unless-stopped
+{%- if choices.docker == "full" %}
+
+  dev:
+    profiles: ['dev']
+    build:
+      context: .
+      target: dev
+    # Laravel and Vite read .env themselves (`php artisan serve` even drops other variables for
+    # the PHP server), so settings belong in .env; these only make the servers reachable.
+    init: true
+    environment:
+      # docker-init forwards stop signals to every process of the dev servers.
+      TINI_KILL_PROCESS_GROUP: '1'
+      # php artisan serve and Vite listen on all interfaces, so the published ports work.
+      SERVER_HOST: 0.0.0.0
+      VITE_HOST: 0.0.0.0
+    ports:
+      - '${APP_PORT:-8000}:${APP_PORT:-8000}'
+      - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
+    volumes:
+      # Sources from the project folder; dependencies stay in volumes (Linux builds).
+      - .:/app
+      - vendor:/app/vendor
+      - node_modules:/app/node_modules
+{%- if choices.database == "sqlite" %}
+      - ${DOCKER_DATA:-data}:/app/data
+{%- else %}
+    depends_on:
+      db:
+        condition: service_healthy
+{%- endif %}
+{%- endif %}
+{%- if choices.database == "postgres" %}
+
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?Set DB_DATABASE in .env}
+      POSTGRES_USER: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    ports:
+      # Reachable from this machine (database tools{% if choices.docker == "run" %}, php artisan{% endif %}) on FORWARD_DB_PORT.
+      - '127.0.0.1:${FORWARD_DB_PORT:-5432}:5432'
+    volumes:
+      - ${DOCKER_DATA:-data}:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+{%- elif choices.database == "mysql" %}
+
+  db:
+    image: mysql:8.4
+    # A subfolder keeps the data directory free of other files.
+    command: ['--datadir=/var/lib/mysql/mysql']
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:?Set DB_DATABASE in .env}
+      MYSQL_USER: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    ports:
+      # Reachable from this machine (database tools{% if choices.docker == "run" %}, php artisan{% endif %}) on FORWARD_DB_PORT.
+      - '127.0.0.1:${FORWARD_DB_PORT:-3306}:3306'
+    volumes:
+      - ${DOCKER_DATA:-data}:/var/lib/mysql
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    restart: unless-stopped
+{%- endif %}
+
+volumes:
+  data:
+{%- if choices.docker == "full" %}
+  vendor:
+  node_modules:
+{%- endif %}

@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "laravel.vscode-laravel",
+        "bmewburn.vscode-intelephense-client",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"{% if choices.frontend == "vue" %},
+        "vue.volar"{% endif %}{% if choices.css == "tailwind" %},
+        "bradlc.vscode-tailwindcss"{% endif %}
+    ]
+}

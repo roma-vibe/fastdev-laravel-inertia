@@ -1,0 +1,70 @@
+# {{ project.name }} — Specification
+
+Status: draft · Created {{ project.created_at }}
+
+<!--
+Agents: this is the product specification and the source of truth for what to build.
+Complete it from the initial brief before implementing features: ask the owner about anything
+unclear, replace every guidance comment with real content, delete sections that do not apply,
+and keep the document current as decisions are made.
+-->
+
+## Initial brief
+
+{% if project.brief | trim %}{{ project.brief | trim }}{% else %}_No brief was given. Ask the owner what this project should do and record the answer here._{% endif %}
+
+## Goals
+
+<!-- 3–5 outcomes that define success. Why does this project exist, and how will we know it works? -->
+
+## Users
+
+<!-- Who uses it (roles or personas), what they need to get done, and who may access what. Say whether sign-in is needed (Laravel's starter kits or Fortify add authentication). -->
+
+## Scope
+
+### In scope
+
+<!-- Capabilities of the first release. -->
+
+### Out of scope
+
+<!-- What is explicitly excluded for now, to keep the first release small. -->
+
+## Features
+
+<!--
+One subsection per feature: a user story, testable acceptance criteria and edge cases. Example:
+
+### Notes
+- As a user I can write short notes and see them newest first.
+- Acceptance: a title (1–200 characters) is required; blank titles are rejected with a message under the field; deleting asks for confirmation and removes the note immediately.
+-->
+
+## Data model
+
+<!-- Entities with fields (type, constraints, defaults), relations and indexes. Each change becomes a Laravel migration in database/migrations/ and an Eloquent model in app/Models/. -->
+
+## Pages and routes
+
+<!-- One line per route in routes/web.php: method, URL, controller action, Inertia page (resources/js/Pages/…) or redirect, and the props the page receives. Writes (POST/PUT/PATCH/DELETE) redirect and report success with a flash message; validation errors are shown per field. -->
+
+## UI
+
+<!-- Navigation, the main flows, and empty / loading / error states. Styles: {% if choices.css == "tailwind" %}Tailwind CSS{% elif choices.css == "bootstrap" %}Bootstrap{% else %}plain CSS{% endif %}. -->
+
+## Non-functional requirements
+
+<!-- Security (authentication, authorization with policies, validation, CSRF is built in, secrets in .env), privacy, performance, accessibility, supported browsers, logging, backups of the {% if choices.database == "sqlite" %}SQLite file{% elif choices.database == "postgres" %}PostgreSQL database{% else %}MySQL database{% endif %}, deployment ({% if choices.docker != "none" %}the production Docker image served by FrankenPHP{% else %}a PHP 8.4+ server with `npm run build` assets{% endif %}). -->
+
+## Open questions
+
+<!-- Decisions that need the owner. Remove an item once it is answered and record the answer in the relevant section. -->
+
+- _None yet._
+
+## Milestones
+
+<!-- Small, shippable increments in order. Each one ends with `{% if choices.docker == "full" %}docker compose run --rm dev {% endif %}composer check` and `{% if choices.docker == "full" %}docker compose run --rm dev {% endif %}npm run build` passing. -->
+
+1. _To be defined._

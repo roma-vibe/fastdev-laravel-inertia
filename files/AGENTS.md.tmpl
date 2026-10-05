@@ -1,0 +1,214 @@
+{% set vue = choices.frontend == "vue" -%}
+{% set ext = "vue" if vue else "tsx" -%}
+{% set fw = "Vue" if vue else "React" -%}
+{% set entry = "app.ts" if vue else "app.tsx" -%}
+{% set full = choices.docker == "full" -%}
+{% set run = "docker compose run --rm dev " if full else "" -%}
+{% set dbname = "SQLite" if choices.database == "sqlite" else ("PostgreSQL" if choices.database == "postgres" else "MySQL") -%}
+# {{ project.name }} — agent guide
+
+Rules and workflows for AI coding agents working in this repository. Humans start with `README.md`.
+{%- if options.spec_md %}
+
+**Read `SPEC.md` first.** It defines what this project must do. If it is incomplete, complete it with the owner before building features, and keep it current as decisions are made.
+{%- endif %}
+{%- if full %}
+
+**Everything runs in Docker.** PHP, Composer and Node.js are not needed on the host and must not be run there: `vendor/` and `node_modules/` live in Docker volumes (Linux builds). Run every `composer`, `php artisan` and `npm` command as `docker compose run --rm dev <command>`; the dev server is `docker compose up dev`.
+{%- endif %}
+
+## Stack
+
+- **Backend:** PHP 8.4+{% if choices.docker != "none" %} (PHP 8.5 in the Docker images){% endif %} and Laravel 13: routing, form request validation, Eloquent models, migrations, sessions and cache in the database.
+- **Frontend:** Inertia 3 with {% if vue %}Vue 3.5 single-file components (`<script setup lang="ts">`){% else %}React 19 function components (TSX){% endif %}. Laravel controllers return pages with props; there is no separate JSON API and no client-side router. Links and forms go through Inertia (`Link`, `router`, `useForm`).
+- **Styles:** {% if choices.css == "tailwind" %}Tailwind CSS 4 (`@tailwindcss/vite`). Utilities work in every template; the shared building blocks (`card`, `btn`, `form-control`, `alert`…) are component classes in `resources/css/app.css`.{% elif choices.css == "bootstrap" %}Bootstrap 5.3 (CSS only, imported in `resources/css/app.css`). Use Bootstrap's components and utilities; app-specific layout classes live in `resources/css/app.css`.{% else %}plain CSS in `resources/css/app.css`: design tokens as CSS variables, a few shared building blocks (`card`, `btn`, `form-control`, `alert`…), light and dark mode through `prefers-color-scheme`.{% endif %}
+- **Database:** {% if choices.database == "sqlite" %}SQLite, a single file `data/database.sqlite`.{% elif choices.docker == "none" %}{{ dbname }} on a server you run yourself (see Configuration).{% else %}{{ dbname }} {% if choices.database == "postgres" %}18{% else %}8.4{% endif %} in the `db` container.{% endif %} Tests always use an in-memory SQLite database.
+- **Build:** Vite 8 with `laravel-vite-plugin` (hot reload in development, hashed assets in `public/build` for production), TypeScript 6 in strict mode.
+- **Quality:** PHPUnit 12 feature tests, Larastan (PHPStan at level max), Pint (Laravel preset), ESLint (typescript-eslint strict, type-checked{% if vue %}, eslint-plugin-vue{% else %}, React hooks rules{% endif %}), Prettier{% if choices.css == "tailwind" %} with the Tailwind class sorter{% endif %}.
+{%- if choices.docker != "none" %}
+- **Docker:** {% if full %}a `dev` container for everything in development and {% endif %}a production image served by FrankenPHP (see Docker below).
+{%- endif %}
+
+## Project map
+
+```text
+.env / .env.example            All configuration (single source of truth); .env is git-ignored
+app/
+  Http/Controllers/            Thin controllers: form request → service → Inertia::render() or redirect
+  Http/Requests/               Form requests: validation rules and typed accessors of the input
+  Http/Resources/              The shape of models in page props (camelCase), mirrored in resources/js/types
+  Http/Middleware/HandleInertiaRequests.php   Props shared with every page (appName)
+  Models/                      Eloquent models: #[Fillable], casts, relations, @property docs for Larastan
+  Services/                    Business rules; the only code that queries or changes models
+  Providers/AppServiceProvider.php            Container bindings and boot-time setup
+bootstrap/app.php              Middleware (Inertia) and routing setup
+config/                        Configuration: the only code that calls env(); app code uses config()
+database/migrations/           Schema changes, one class per file, in timestamp order
+database/factories/, seeders/  Test and sample data (`php artisan db:seed`)
+routes/web.php                 Every route: pages and form actions
+resources/views/app.blade.php  The HTML shell of every page: Vite tags and <x-inertia::app />
+resources/js/{{ entry }}{% if vue %} {% endif %}           Inertia bootstrap: page resolver, default layout, page title
+resources/js/Pages/            One component per page: Inertia::render('Notes/Index') → Pages/Notes/Index.{{ ext }}
+resources/js/Layouts/          AppLayout.{{ ext }}: header with the app name, navigation, flash message
+resources/js/Components/       Presentational components: props in, events{% if not vue %} (callbacks){% endif %} out
+resources/js/types/            index.ts: types of page props; inertia.d.ts: shared props and flash data
+resources/js/lib/              Framework-free helpers (formatting…)
+resources/css/app.css          Styles
+tests/Feature/                 HTTP tests of routes and pages (assertInertia), with RefreshDatabase
+tests/Unit/                    Tests of single classes
+{%- if choices.database == "sqlite" %}
+data/                          The SQLite database (git-ignored)
+{%- endif %}
+public/                        Web root; public/build is the Vite build output (git-ignored)
+{%- if choices.docker != "none" %}
+Dockerfile                     Images: {% if full %}`dev` (PHP, Composer, Node.js) and {% endif %}the production app (FrankenPHP)
+docker-compose.yml             Services: app{% if full %}, dev{% endif %}{% if choices.database != "sqlite" %}, db{% endif %}
+docker/entrypoint.sh           Production start: caches config, runs migrations
+{%- endif %}
+```
+
+## Architecture rules
+
+A request flows through the same layers every time; each layer talks only to the next one:
+
+```text
+{{ fw }} page (useForm / router / Link) → routes/web.php → controller → form request → service → model → {{ dbname }}
+controller → Inertia::render('Page', props from resources) → page props;  write → redirect + Inertia::flash() → page.flash
+```
+
+- **Routes** (`routes/web.php`) map URLs to controller actions and name them (`notes.index`). Simple static pages may use `Route::inertia('/about', 'About')`.
+- **Controllers** are thin: take a form request, call one service method, return `Inertia::render()` for pages or a redirect after writes (POST/PUT/PATCH/DELETE never render; they redirect, and Inertia follows). No queries, no business rules.
+- **Form requests** (`app/Http/Requests`) hold validation rules and typed accessors (`$request->title()`). Failed validation redirects back with errors; the page shows them from `form.errors`. Laravel trims strings and turns empty strings into `null` before validation.
+- **Services** (`app/Services`) hold business rules and all queries of a feature. They receive plain values or models and return models or collections; no HTTP objects, no Inertia.
+- **Models** (`app/Models`) describe persistence: fillable attributes (`#[Fillable]`), casts, relations and scopes. Document columns with `@property` so Larastan knows their types.
+- **Resources** (`app/Http/Resources`) turn models into page props (`NoteResource::collection($notes)->resolve()`). Never pass models to pages directly: every attribute would reach the browser. Keep each resource in sync with its TypeScript type in `resources/js/types/index.ts`.
+- **Pages** (`resources/js/Pages`) receive typed props, write through `useForm` (forms) or `router` (e.g. delete), and navigate with `Link`. No `fetch`/axios for page data. Page titles come from `<Head title="…" />`; `{{ entry }}` appends the app name.
+- **Components** (`resources/js/Components`) are presentational: {% if vue %}props in, events out (`defineProps`, `defineEmits`){% else %}props in, callbacks out{% endif %}; no `router` or `useForm` inside unless the component is a form (like `NoteForm`).
+- **Shared props and flash:** `HandleInertiaRequests::share()` adds props to every page (the app name); `Inertia::flash('success', '…')` shows a one-time message in `AppLayout`. Declare both in `resources/js/types/inertia.d.ts`.
+- **Errors:** validation errors come back as `errors` props (per field); missing models return 404 through route model binding (`Note $note`); other exceptions are logged and shown as Laravel's error page (details only when `APP_DEBUG=true`).
+
+## Commands
+{% if full %}
+Every command runs in the `dev` container{% if choices.database != "sqlite" %} (the `db` container starts automatically when needed){% endif %}:
+{% endif %}
+| Command | Use |
+| --- | --- |
+| `{% if full %}docker compose up dev{% else %}composer dev{% endif %}` | Development: `php artisan serve` on http://localhost:{{ ports.APP_PORT }} and Vite with hot reload on port {{ ports.VITE_PORT }}{% if choices.docker == "run" and choices.database != "sqlite" %}; starts the `db` container first{% endif %} |
+| `{{ run }}composer check` | **Quality gate:** Pint (check), Larastan, PHPUnit, ESLint, Prettier (check), TypeScript |
+| `{{ run }}composer test` | PHPUnit tests; one file or test: `{{ run }}php artisan test --filter=NotesTest` |
+| `{{ run }}composer format` | Fix formatting: Pint, `eslint --fix`, Prettier |
+| `{{ run }}composer stan` | Larastan only |
+| `{{ run }}npm run build` | Production build of the frontend into `public/build` |
+| `{{ run }}npm run check` | Frontend checks only: ESLint, Prettier, `{% if vue %}vue-tsc{% else %}tsc{% endif %}` |
+| `{{ run }}php artisan migrate` | Apply pending migrations (`migrate:rollback`, `migrate:fresh --seed` for a clean database) |
+| `{{ run }}php artisan make:model Task -mf` | Generators: `make:model`, `make:controller`, `make:request`, `make:resource`, `make:test`, `make:migration` |
+| `{{ run }}php artisan tinker` | REPL with the app loaded |
+| `{{ run }}composer require <package>` / `{{ run }}npm install <package>` | Add a dependency (commit `composer.lock` / `package-lock.json`) |
+{%- if choices.docker != "none" %}
+| `docker compose up --build{% if full %} app{% endif %}` | Build and run the production container on http://localhost:{{ ports.APP_PORT }} |
+{%- endif %}
+{%- if full %}
+
+After changing `composer.json` or `package.json` run `docker compose run --rm dev composer install` / `docker compose run --rm dev npm install`; after changing `Dockerfile`, `docker compose build dev`.
+{%- endif %}
+
+## Configuration and environment
+
+- One `.env` in the project root; `.env.example` lists every key with a comment and is committed. Never commit `.env` or print secret values (`APP_KEY`, passwords).
+- The app name comes **only** from `APP_NAME`: `config('app.name')` → the shared prop `appName` → the header and page titles. Never hardcode it in PHP, Blade or {{ fw }}.
+- Only `config/*.php` calls `env()`; everywhere else use `config('file.key')` (Larastan enforces it, and `php artisan optimize` caches config in production). To add a setting: add the key to `.env.example` and `.env`, read it in a config file (`'key' => env('MY_KEY', 'default')`), use `config('…')`, and document it in `README.md`.
+- The browser receives what pages get as props, plus `VITE_*` keys that Vite compiles into the bundle at build time (`VITE_APP_NAME`; the pages use the shared prop `appName` instead, which also works in the Docker image built without `.env`). Vite expands `$VAR` in `.env` values even inside single quotes, so a `VITE_*` copy of a value with `$` differs from what Laravel reads (literally). Never put secrets into props or `VITE_*` keys.
+- Ports: `APP_PORT` ({{ ports.APP_PORT }}) for the app (keep `APP_URL` on the same port), `VITE_PORT` ({{ ports.VITE_PORT }}) for Vite.
+{%- if choices.database == "sqlite" %}
+- Database: `DB_DATABASE=data/database.sqlite`, relative to the project root; `php artisan migrate` creates the file.
+{%- elif choices.docker == "none" %}
+- Database: {{ dbname }} runs on this machine; create the database and set `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` in `.env`, then run `php artisan migrate`.
+{%- else %}
+- Database: the `db` container creates the database and user from `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` on its first start (changing them later requires a new data volume). {% if full %}PHP runs in containers, so `.env` points at `db:{% if choices.database == "postgres" %}5432{% else %}3306{% endif %}`; database tools on this machine connect to 127.0.0.1:`FORWARD_DB_PORT` ({{ ports.FORWARD_DB_PORT }}).{% else %}`.env` points PHP on this machine at the published port 127.0.0.1:`FORWARD_DB_PORT` ({{ ports.FORWARD_DB_PORT }}); the `app` container overrides it with `db:{% if choices.database == "postgres" %}5432{% else %}3306{% endif %}` in `docker-compose.yml`.{% endif %}
+{%- endif %}
+- `php artisan serve` restarts when `.env` changes; Vite reads `.env` at start.
+
+## How to
+
+### Add a page
+
+1. Create `resources/js/Pages/<Name>.{{ ext }}` (subfolders become part of the name: `Pages/Tasks/Index.{{ ext }}` is `Tasks/Index`). Set the title with `<Head title="…" />`.
+2. Add a route: `Route::inertia('/about', 'About')` for a static page, or a controller action that returns `Inertia::render('<Name>', [...props])`.
+3. Declare the props: {% if vue %}`defineProps<{ … }>()`{% else %}a props type on the component function{% endif %}, with shared types in `resources/js/types/index.ts`.
+4. Link to it with `Link` (and add it to the navigation in `resources/js/Layouts/AppLayout.{{ ext }}` when it is a main page).
+5. Add a feature test that asserts the component and props (`assertInertia`).
+
+### Add a feature (example: tasks)
+
+1. `{{ run }}php artisan make:model Task -mf` → model, migration, factory. Write the migration (below), `#[Fillable]` and `@property` docs on the model, and the factory `definition()`.
+2. `app/Services/TaskService.php`: queries and business rules (constructor injection wherever it is used).
+3. `{{ run }}php artisan make:request StoreTaskRequest`: `authorize()` returns `true` (or a real check), `rules()`, typed accessors.
+4. `{{ run }}php artisan make:resource TaskResource`: the fields the pages need, in camelCase; add the matching `Task` type to `resources/js/types/index.ts`.
+5. `{{ run }}php artisan make:controller TaskController`: inject the service; actions return `Inertia::render('Tasks/Index', ['tasks' => TaskResource::collection(...)->resolve()])` or `to_route('tasks.index')` with `Inertia::flash()`.
+6. Routes in `routes/web.php`, named `tasks.index`, `tasks.store`… Use route model binding (`{task}` → `Task $task`).
+7. Page `resources/js/Pages/Tasks/Index.{{ ext }}` and components in `resources/js/Components/`; a navigation link in `AppLayout.{{ ext }}`.
+8. `tests/Feature/TasksTest.php`: list (`assertInertia`), create (valid and invalid input), delete, 404s.
+
+The Notes feature is the reference for every layer: `routes/web.php`, `NoteController`, `StoreNoteRequest`, `NoteService`, `Note`, `NoteResource`, the notes migration and factory, `Pages/Notes/Index.{{ ext }}`, `Components/NoteForm.{{ ext }}`, `Components/NoteCard.{{ ext }}`, `tests/Feature/NotesTest.php`. When it is no longer useful, remove all of these, the navigation link, and add a migration that drops the `notes` table.
+
+### Add a migration
+
+- `{{ run }}php artisan make:migration add_due_date_to_tasks_table`; write `up()` and `down()`, then `{{ run }}php artisan migrate`.
+- Never edit a migration that may have run anywhere (another machine, production); add a new one.
+- Use the schema builder only (no raw SQL), so migrations run on {% if choices.database == "sqlite" %}any database{% else %}{{ dbname }} and on the SQLite database of the tests{% endif %}. Add indexes for columns you filter or sort by, and `constrained()->cascadeOnDelete()` (or `nullOnDelete()`) for relations.
+{%- if choices.docker != "none" %}
+- The production container applies pending migrations on start (`docker/entrypoint.sh`).
+{%- endif %}
+
+### Add shared data (every page)
+
+Add the prop in `HandleInertiaRequests::share()` (keep it small, it is sent with every response; use a closure for values that need a query), declare its type in `sharedPageProps` in `resources/js/types/inertia.d.ts`, and read it with `usePage().props`.
+
+## Testing
+
+- `{{ run }}composer test` runs PHPUnit with `phpunit.xml`: `APP_ENV=testing` and an in-memory SQLite database (forced, so tests never touch the real database).
+- **Feature tests** (`tests/Feature`) call routes: `$this->get('/notes')->assertInertia(fn (Assert $page) => $page->component('Notes/Index')->has('notes', 2))`; writes with `$this->post(...)->assertRedirect(...)->assertSessionHasErrors(...)`, `assertInertiaFlash()`, `assertDatabaseHas()`. Use `RefreshDatabase` and model factories. `assertInertia` also checks that the page component file exists.
+- **Unit tests** (`tests/Unit`) cover single classes (resources, services with mocked dependencies).
+- `Tests\TestCase` disables Vite, so tests need no build and no dev server.
+- Every new route, rule or bug fix gets a test.{% if choices.database != "sqlite" %} Behaviour specific to {{ dbname }} (JSON columns, full-text search, locking) is not covered by the SQLite tests: check it against the real database by hand.{% endif %}
+
+## Definition of done
+
+1. `{{ run }}composer check` passes with **zero** errors and warnings (Pint, Larastan at level max, PHPUnit, ESLint with `--max-warnings=0`, Prettier, `{% if vue %}vue-tsc{% else %}tsc{% endif %}`).
+2. `{{ run }}npm run build` succeeds{% if choices.docker != "none" %}, and `docker compose build app` still builds the production image when `Dockerfile`, dependencies or runtime files changed{% endif %}.
+3. New behaviour is covered by tests; the page works in the browser (`{% if full %}docker compose up dev{% else %}composer dev{% endif %}`).
+4. Docs match the code: `.env.example`, `README.md`{% if options.spec_md %}, `SPEC.md`{% endif %} and this file are updated when commands, env keys, structure or rules change.
+
+## Conventions
+
+- PHP: types on every parameter, return value and property; constructor injection instead of facades in services and controllers (except `Inertia`, `DB`, `Log`); generics in PHPDoc for collections (`Collection<int, Note>`). Never silence Larastan with `@phpstan-ignore` without a comment that explains why.
+- TypeScript: strict; no `any`, no `@ts-ignore`, no non-null assertions (`!`); narrow instead. Import project files through the `@/` alias (`@/Components/NoteCard{% if vue %}.vue{% endif %}`); type-only imports use `import type`.
+- Naming: controllers `<Model>Controller`, requests `Store<Model>Request` / `Update<Model>Request`, services `<Model>Service`, resources `<Model>Resource`; pages `Pages/<Plural>/Index|Show|Edit.{{ ext }}`; components `PascalCase.{{ ext }}`; routes `<plural>.<action>`; database `snake_case`, props and TypeScript `camelCase`.
+- Styling: {% if choices.css == "tailwind" %}Tailwind utilities in markup for one-off layout; repeated building blocks as component classes in `resources/css/app.css` (`@apply`); dark mode with `dark:` variants (follows the OS).{% elif choices.css == "bootstrap" %}Bootstrap components and utility classes in markup; only app-specific layout goes into `resources/css/app.css`, using Bootstrap's CSS variables (`var(--bs-…)`). A dark theme is `data-bs-theme="dark"` on `<html>` (Bootstrap color modes).{% else %}semantic class names in markup, styles in `resources/css/app.css` using the CSS variables defined at the top; dark mode through the `prefers-color-scheme` block.{% endif %}
+- Let the formatters format (`{{ run }}composer format`); do not hand-format or disable lint rules to get green.
+- Dependencies: prefer Laravel's own features and existing packages; add a package only when it clearly pays off, and commit the lockfile.
+- Write code, comments, UI texts and docs in English.
+{%- if choices.docker != "none" %}
+
+## Docker
+{% if full %}
+Mode: **everything in Docker**. `docker-compose.yml` has these services:
+
+- `dev` (profile `dev`, stage `dev` of `Dockerfile`: PHP 8.5, Composer, Node.js 24, user `app`): mounts the project at `/app`, keeps `vendor/` and `node_modules/` in named volumes, publishes `APP_PORT` and `VITE_PORT`. `docker compose up dev` runs the servers of `npm run dev:all` (what `composer dev` runs; keep the `CMD` of the `dev` stage in sync); `docker compose run --rm dev <command>` runs anything else. It does not load `.env` as environment: Laravel and Vite read the file themselves (`php artisan serve` even drops other variables for the PHP server), so settings belong in `.env`; the `environment:` entries only make the servers listen on `0.0.0.0`.
+- `app`: the production image, `docker compose up --build app`.
+{%- if choices.database != "sqlite" %}
+- `db`: {{ dbname }} with a health check; `dev` and `app` wait for it.
+{%- endif %}
+{%- else %}
+Mode: **Docker to run the app**. Development happens on this machine (`composer dev`); Docker builds and runs the production image{% if choices.database != "sqlite" %} and the {{ dbname }} server (`db`), which `composer dev` needs: the Dev command starts it with `docker compose up -d --wait db`{% endif %}.
+{%- endif %}
+
+- `Dockerfile` (multi-stage): Composer installs production dependencies, Node.js builds `public/build`, and the runtime stage (`dunglas/frankenphp`, PHP 8.5 with `pdo_sqlite`, `pdo_pgsql`, `pdo_mysql`) serves `public/` on port 8080 as user `app`. `docker/entrypoint.sh` runs `php artisan optimize` and `migrate --force` on every start. `.env` is never copied into images; the `app` service gets it through `env_file`, with `APP_ENV=production` and `APP_DEBUG=false`.
+- **Data:** `DOCKER_DATA` in `.env` decides where containers keep {% if choices.database == "sqlite" %}the SQLite database (`/app/data`){% else %}the {{ dbname }} data{% endif %}: {% if choices.data == "local" %}**`./data`** — the project's `data/` folder (current setting); set `DOCKER_DATA=data` to use a Docker volume instead.{% else %}**`data`** — the named volume `{{ project.slug }}_data` (current setting); `docker compose down -v` deletes it. Set `DOCKER_DATA=./data` to keep the files in the project's `data/` folder instead.{% endif %}
+- Everything is named after `COMPOSE_PROJECT_NAME` ({{ project.slug }}). Stop with `docker compose{% if full %} --profile dev{% endif %} down` (add `-v` to delete the volumes).
+- When the app needs another PHP extension, add it to `install-php-extensions` in the `base` stage{% if full %} and rebuild (`docker compose build dev app`){% endif %}.
+{%- endif %}
+
+---
+
+Bootstrapped from `{{ skeleton.id }} {{ skeleton.version }}`.

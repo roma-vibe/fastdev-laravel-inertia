@@ -1,0 +1,35 @@
+# Dependencies
+/node_modules
+/vendor
+
+# Build output and runtime files
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/bootstrap/ssr
+
+# Environment (keep .env.example in Git)
+.env
+.env.*
+!.env.example
+
+# Local data (SQLite database, database server files of Docker containers)
+/data/*
+!/data/.gitkeep
+
+# Tools and caches
+.phpunit.cache
+.phpunit.result.cache
+*.tsbuildinfo
+*.log
+_ide_helper.php
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+/.idea
+/.zed
+/.vscode/*
+!/.vscode/extensions.json

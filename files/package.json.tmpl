@@ -1,0 +1,73 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "name": "app",
+    "private": true,
+    "type": "module",
+    "engines": {
+        "node": ">=24"
+    },
+    "scripts": {
+        "dev": "vite",
+        "dev:all": "concurrently --kill-others --names server,vite --prefix-colors blue,magenta \"php artisan serve\" vite",
+        "build": "vite build",
+        "lint": "eslint . --max-warnings=0",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write resources/ vite.config.ts eslint.config.js",
+        "format:check": "prettier --check resources/ vite.config.ts eslint.config.js",
+        "typecheck": "{% if choices.frontend == "vue" %}vue-tsc{% else %}tsc{% endif %} --build",
+        "check": "npm run lint && npm run format:check && npm run typecheck"
+    },
+    "dependencies": {
+{%- if choices.frontend == "vue" %}
+        "@inertiajs/vue3": "3.7.1",
+{%- else %}
+        "@inertiajs/react": "3.7.1",
+{%- endif %}
+{%- if choices.css == "bootstrap" %}
+        "bootstrap": "5.3.8",
+{%- endif %}
+{%- if choices.frontend == "vue" %}
+        "vue": "3.5.43"
+{%- else %}
+        "react": "19.3.0",
+        "react-dom": "19.3.0"
+{%- endif %}
+    },
+    "devDependencies": {
+{%- if choices.frontend == "react" %}
+        "@eslint/js": "10.0.1",
+{%- endif %}
+{%- if choices.css == "tailwind" %}
+        "@tailwindcss/vite": "4.3.3",
+{%- endif %}
+        "@types/node": "24.19.0",
+{%- if choices.frontend == "vue" %}
+        "@vitejs/plugin-vue": "6.0.9",
+        "@vue/eslint-config-typescript": "14.9.0",
+{%- else %}
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
+        "@vitejs/plugin-react": "6.1.1",
+{%- endif %}
+        "concurrently": "10.0.5",
+        "eslint": "10.11.0",
+        "eslint-config-prettier": "10.1.8",
+{%- if choices.frontend == "vue" %}
+        "eslint-plugin-vue": "10.11.1",
+{%- else %}
+        "eslint-plugin-react-hooks": "7.1.1",
+{%- endif %}
+        "laravel-vite-plugin": "3.2.0",
+        "prettier": "3.9.9",
+{%- if choices.css == "tailwind" %}
+        "prettier-plugin-tailwindcss": "0.8.1",
+        "tailwindcss": "4.3.3",
+{%- endif %}
+        "typescript": "6.0.3",
+{%- if choices.frontend == "react" %}
+        "typescript-eslint": "8.71.0",
+{%- endif %}
+        "vite": "8.3.1"{% if choices.frontend == "vue" %},
+        "vue-tsc": "3.3.11"{% endif %}
+    }
+}

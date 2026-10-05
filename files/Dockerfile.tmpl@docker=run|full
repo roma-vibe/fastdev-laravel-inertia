@@ -1,0 +1,71 @@
+# syntax=docker/dockerfile:1
+
+# ---- Base: PHP 8.5 with FrankenPHP (the production web server) and the app's PHP extensions ----
+FROM dunglas/frankenphp:1-php8.5-trixie AS base
+# pdo_sqlite is built in; the PostgreSQL and MySQL drivers let DB_CONNECTION change without a rebuild.
+RUN install-php-extensions pdo_pgsql pdo_mysql pcntl
+WORKDIR /app
+
+# ---- Composer (with unzip for fast, reliable package extraction) ----
+FROM base AS composer
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+{% if choices.docker == "full" %}
+# ---- Development: `docker compose up dev`; sources are mounted, dependencies live in volumes ----
+FROM composer AS dev
+COPY --from=node:24-trixie-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:24-trixie-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+# The user owns the mount points, so the named volumes created from them are writable.
+ARG UID=1000
+ARG GID=1000
+RUN groupadd --gid "$GID" app && useradd --uid "$UID" --gid app --create-home app \
+    && mkdir -p vendor node_modules data && chown -R app:app /app
+USER app
+# The base image points XDG folders at /config and /data (FrankenPHP's); tools use the user's home.
+ENV XDG_CONFIG_HOME=/home/app/.config \
+    XDG_DATA_HOME=/home/app/.local/share
+# The base image's health check probes FrankenPHP, which does not run in development.
+HEALTHCHECK NONE
+# The servers of `npm run dev:all` (what `composer dev` runs), started without npm in between:
+# concurrently waits for them on stop, so Vite can remove public/hot before the container ends.
+CMD ["node_modules/.bin/concurrently", "--kill-others", "--names", "server,vite", "--prefix-colors", "blue,magenta", "php artisan serve", "node_modules/.bin/vite"]
+{% endif %}
+# ---- PHP dependencies without dev packages, optimized autoloader ----
+FROM composer AS vendor
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --no-scripts --no-autoloader
+COPY . .
+RUN composer dump-autoload --no-dev --classmap-authoritative --no-scripts
+
+# ---- Frontend assets: Vite builds public/build ----
+FROM node:24-trixie-slim AS assets
+WORKDIR /app
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci
+COPY vite.config.ts tsconfig*.json ./
+COPY resources resources
+RUN npm run build
+
+# ---- Runtime: FrankenPHP serves public/ on port 8080 as a non-root user ----
+FROM base
+ENV APP_ENV=production \
+    APP_DEBUG=false \
+    LOG_CHANNEL=stderr
+ARG UID=1000
+ARG GID=1000
+RUN groupadd --gid "$GID" app && useradd --uid "$UID" --gid app app \
+    && chown -R app:app /config/caddy /data/caddy
+COPY --chown=app:app . .
+COPY --from=vendor --chown=app:app /app/vendor vendor
+COPY --from=assets --chown=app:app /app/public/build public/build
+RUN mkdir -p data && chown app:app data bootstrap/cache && chown -R app:app storage
+USER app
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["php", "-r", "exit(@file_get_contents('http://127.0.0.1:8080/up') === false ? 1 : 0);"]
+ENTRYPOINT ["sh", "docker/entrypoint.sh"]
+CMD ["frankenphp", "php-server", "--root", "public", "--listen", ":8080"]

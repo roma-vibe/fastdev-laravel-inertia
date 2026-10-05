@@ -1,0 +1,165 @@
+@import 'tailwindcss';
+
+/*
+ * Tailwind CSS 4. Utilities are available in every template; the shared building blocks below
+ * (layout, card, button, form, alert) are component classes, so pages stay short. Colors follow
+ * the OS light/dark setting through `dark:` variants.
+ */
+
+@theme {
+    --color-primary: var(--color-indigo-600);
+    --color-primary-hover: var(--color-indigo-700);
+}
+
+@utility container {
+    margin-inline: auto;
+    padding-inline: 1rem;
+    max-width: 72rem;
+}
+
+@layer base {
+    body {
+        @apply bg-gray-50 text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
+    }
+
+    h1 {
+        @apply text-3xl font-semibold tracking-tight;
+    }
+
+    code {
+        @apply rounded bg-gray-100 px-1 py-0.5 text-sm dark:bg-gray-800;
+    }
+}
+
+@layer components {
+    /* Layout */
+    .app-header {
+        @apply border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900;
+    }
+
+    .navbar > .container {
+        @apply flex items-center justify-between gap-4 py-3;
+    }
+
+    .navbar-brand {
+        @apply text-lg font-semibold;
+    }
+
+    .navbar-nav {
+        @apply flex gap-1;
+    }
+
+    .nav-link {
+        @apply rounded-md px-3 py-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white;
+    }
+
+    .nav-link.active {
+        @apply font-medium text-gray-900 dark:text-white;
+    }
+
+    .app-main {
+        @apply py-8;
+    }
+
+    .page-header {
+        @apply mb-6 space-y-1;
+    }
+
+    .page-header p,
+    .lead {
+        @apply text-gray-600 dark:text-gray-400;
+    }
+
+    .lead {
+        @apply mb-6 text-lg;
+    }
+
+    /* Card */
+    .card {
+        @apply rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900;
+    }
+
+    .card-body {
+        @apply p-5;
+    }
+
+    .card-title {
+        @apply mb-3 text-lg font-semibold;
+    }
+
+    h1.card-title {
+        @apply text-3xl;
+    }
+
+    .card-text {
+        @apply mb-3 whitespace-pre-line text-gray-700 dark:text-gray-300;
+    }
+
+    /* Buttons */
+    .btn {
+        @apply inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent px-4 py-2 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+    }
+
+    .btn-sm {
+        @apply px-2.5 py-1 text-sm;
+    }
+
+    .btn-primary {
+        @apply bg-primary text-white hover:bg-primary-hover;
+    }
+
+    .btn-outline-danger {
+        @apply border-red-600 text-red-600 hover:bg-red-600 hover:text-white dark:border-red-400 dark:text-red-400 dark:hover:bg-red-500 dark:hover:text-white;
+    }
+
+    /* Forms */
+    .field {
+        @apply mb-4;
+    }
+
+    .form-label {
+        @apply mb-1 block font-medium;
+    }
+
+    .form-control {
+        @apply block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/25 focus:outline-none dark:border-gray-700 dark:bg-gray-950;
+    }
+
+    .form-control.is-invalid {
+        @apply border-red-600 focus:border-red-600 focus:ring-red-600/25;
+    }
+
+    .invalid-feedback {
+        @apply mt-1 text-sm text-red-600 dark:text-red-400;
+    }
+
+    /* Alerts */
+    .alert {
+        @apply mb-6 rounded-md border px-4 py-3;
+    }
+
+    .alert-success {
+        @apply border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200;
+    }
+
+    /* Notes */
+    .notes-layout {
+        @apply grid items-start gap-6 md:grid-cols-[20rem_1fr];
+    }
+
+    .note-list {
+        @apply space-y-3;
+    }
+
+    .note-header {
+        @apply flex items-start justify-between gap-3;
+    }
+
+    .note-date {
+        @apply text-sm text-gray-500 dark:text-gray-400;
+    }
+
+    .empty-state {
+        @apply rounded-lg border border-dashed border-gray-300 p-8 text-center text-gray-500 dark:border-gray-700 dark:text-gray-400;
+    }
+}

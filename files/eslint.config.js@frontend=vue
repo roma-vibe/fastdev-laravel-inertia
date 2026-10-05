@@ -1,0 +1,19 @@
+import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript';
+import prettier from 'eslint-config-prettier/flat';
+import pluginVue from 'eslint-plugin-vue';
+import { globalIgnores } from 'eslint/config';
+
+export default defineConfigWithVueTs(
+    globalIgnores(['vendor/**', 'node_modules/**', 'public/**', 'storage/**', 'bootstrap/**']),
+    pluginVue.configs['flat/recommended'],
+    vueTsConfigs.strictTypeChecked,
+    {
+        rules: {
+            // Pages are named after their route (Home.vue, Notes/Index.vue).
+            'vue/multi-word-component-names': 'off',
+            '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+        },
+    },
+    // Formatting belongs to Prettier.
+    prettier,
+);

@@ -1,0 +1,127 @@
+{% set vue = choices.frontend == "vue" -%}
+{% set full = choices.docker == "full" -%}
+{% set run = "docker compose run --rm dev " if full else "" -%}
+{% set dbname = "SQLite" if choices.database == "sqlite" else ("PostgreSQL" if choices.database == "postgres" else "MySQL") -%}
+# {{ project.name }}
+
+A [Laravel 13](https://laravel.com) web app with an [Inertia](https://inertiajs.com) frontend in {% if vue %}[Vue 3](https://vuejs.org){% else %}[React 19](https://react.dev){% endif %} and TypeScript, styled with {% if choices.css == "tailwind" %}[Tailwind CSS 4](https://tailwindcss.com){% elif choices.css == "bootstrap" %}[Bootstrap 5](https://getbootstrap.com){% else %}plain CSS{% endif %}, on {{ dbname }}.
+
+## Requirements
+{% if full %}
+- Docker 24 or newer with Docker Compose. PHP, Composer, Node.js{% if choices.database != "sqlite" %} and {{ dbname }}{% endif %} run in containers; nothing else is needed on this machine.
+{%- else %}
+- PHP 8.4 or newer with the `pdo_{% if choices.database == "postgres" %}pgsql{% elif choices.database == "mysql" %}mysql{% else %}sqlite{% endif %}` extension, and [Composer](https://getcomposer.org) 2 (on macOS: `brew install php composer`, or [Laravel Herd](https://herd.laravel.com))
+- Node.js 24 or newer
+{%- if choices.docker == "run" %}
+- Docker 24 or newer with Docker Compose ({% if choices.database != "sqlite" %}for the {{ dbname }} server and {% endif %}for running the production container)
+{%- elif choices.database == "postgres" %}
+- A PostgreSQL server (e.g. `brew install postgresql@18` or [Postgres.app](https://postgresapp.com)) with a database for this app
+{%- elif choices.database == "mysql" %}
+- A MySQL server (e.g. `brew install mysql`) with a database for this app
+{%- endif %}
+{%- endif %}
+
+## Quick start
+
+```sh
+[ -f .env ] || cp .env.example .env   # first run after cloning
+{%- if full %}
+docker compose build dev
+docker compose run --rm dev composer install
+docker compose run --rm dev npm ci
+docker compose run --rm dev php artisan key:generate
+docker compose run --rm dev php artisan migrate
+docker compose up dev
+{%- else %}
+composer install
+npm ci
+php artisan key:generate
+{%- if choices.docker == "run" and choices.database != "sqlite" %}
+docker compose up -d --wait db        # the {{ dbname }} server
+{%- elif choices.database != "sqlite" %}
+# create the database and set DB_* in .env first
+{%- endif %}
+php artisan migrate
+composer dev
+{%- endif %}
+```
+
+Open http://localhost:{{ ports.APP_PORT }}. The Vite dev server (port {{ ports.VITE_PORT }}) reloads pages, components and styles as you edit them. The **Notes** page is a small example feature that goes through every layer: route → controller → form request → service → model → migration, and an Inertia page with components.
+
+## Commands
+{% if full %}
+Run them in the dev container: `docker compose run --rm dev <command>`.
+{% endif %}
+| Command | What it does |
+| --- | --- |
+| `{% if full %}docker compose up dev{% else %}composer dev{% endif %}` | PHP server and Vite with hot reload |
+| `composer check` | Everything that must pass before a commit: Pint, Larastan, PHPUnit, ESLint, Prettier, TypeScript |
+| `composer test` | PHPUnit tests |
+| `composer format` | Fix formatting (Pint, ESLint, Prettier) |
+| `npm run build` | Production build of the frontend into `public/build` |
+| `php artisan migrate` | Apply database migrations |
+| `php artisan db:seed` | Add sample notes |
+{%- if choices.docker != "none" %}
+| `docker compose up --build{% if full %} app{% endif %}` | Build and run the production container on http://localhost:{{ ports.APP_PORT }} |
+{%- endif %}
+
+## Configuration
+
+All settings live in `.env` in the project root. It is git-ignored; `.env.example` documents every key and is committed.
+
+| Key | Value | Description |
+| --- | --- | --- |
+| `APP_NAME` | `{{ env.APP_NAME }}` | App name in the header and page titles |
+| `APP_URL` | `{{ env.APP_URL }}` | Public URL of the app |
+| `APP_PORT` | `{{ ports.APP_PORT }}` | Port of the app{% if choices.docker != "none" %} (also the published container port){% endif %} |
+| `VITE_PORT` | `{{ ports.VITE_PORT }}` | Port of the Vite dev server |
+| `DB_CONNECTION` | `{{ env.DB_CONNECTION }}` | Database driver |
+| `DB_DATABASE` | `{{ env.DB_DATABASE }}` | {% if choices.database == "sqlite" %}SQLite file, relative to the project root{% else %}Database name{% endif %} |
+{%- if choices.database != "sqlite" %}
+| `DB_HOST`, `DB_PORT` | `{{ env.DB_HOST }}`, `{{ env.DB_PORT }}` | {% if choices.docker == "none" %}Your database server{% elif full %}The `db` container (database tools on this machine: 127.0.0.1:`FORWARD_DB_PORT`){% else %}The `db` container as seen from this machine (the app container uses `db`){% endif %} |
+| `DB_USERNAME`, `DB_PASSWORD` | `{{ env.DB_USERNAME }}`, … | Database credentials |
+{%- endif %}
+{%- if choices.docker != "none" %}
+| `COMPOSE_PROJECT_NAME` | `{{ env.COMPOSE_PROJECT_NAME }}` | Prefix of the Docker containers, volumes and images |
+| `DOCKER_DATA` | `{{ env.DOCKER_DATA }}` | Where containers keep the database: `data` (Docker volume) or `./data` (project folder) |
+{%- endif %}
+
+## Project structure
+
+```text
+app/                 Controllers, form requests, resources, services, models
+routes/web.php       Routes
+database/            Migrations, factories, seeders
+resources/js/        Inertia pages, layouts and components ({% if vue %}Vue{% else %}React{% endif %}, TypeScript)
+resources/css/       Styles
+resources/views/     The HTML shell (app.blade.php)
+tests/               PHPUnit feature and unit tests
+{%- if choices.database == "sqlite" %}
+data/                The SQLite database (git-ignored)
+{%- endif %}
+```
+{%- if choices.docker != "none" %}
+
+## Docker
+{% if full %}
+Everything runs in containers. The `dev` service mounts this folder and keeps `vendor/` and `node_modules/` in Docker volumes:
+
+```sh
+docker compose up dev                              # development with hot reload
+docker compose run --rm dev composer check         # any command in the dev container
+docker compose up --build app                      # production container on http://localhost:{{ ports.APP_PORT }}
+docker compose --profile dev down                  # stop everything; add -v to also delete the volumes
+```
+{% else %}
+```sh
+docker compose up --build   # build the image and run the app on http://localhost:{{ ports.APP_PORT }}
+docker compose logs -f      # follow the logs
+docker compose down         # stop; add -v to also delete the data volume
+```
+{% endif %}
+The production image runs [FrankenPHP](https://frankenphp.dev) with PHP 8.5 as a non-root user, serves the built assets and applies migrations on start. {% if choices.database == "sqlite" %}The SQLite database{% else %}The {{ dbname }} data{% endif %} is stored {% if choices.data == "local" %}in the project's `data/` folder (`DOCKER_DATA=./data`){% else %}in the Docker volume `data` (`DOCKER_DATA=data`){% endif %}; change `DOCKER_DATA` in `.env` to switch.
+{%- endif %}
+
+## Contributing
+
+Run `{{ run }}composer check` before every commit. It must pass without errors or warnings.
