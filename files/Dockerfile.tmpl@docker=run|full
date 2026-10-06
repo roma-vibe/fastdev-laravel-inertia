@@ -15,6 +15,10 @@ COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 {% if choices.docker == "full" %}
 # ---- Development: `docker compose up dev`; sources are mounted, dependencies live in volumes ----
 FROM composer AS dev
+# procps provides `ps`, which concurrently needs to stop the dev servers.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends procps \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=node:24-trixie-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:24-trixie-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \

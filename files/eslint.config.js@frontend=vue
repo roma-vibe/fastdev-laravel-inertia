@@ -1,18 +1,49 @@
-import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript';
 import prettier from 'eslint-config-prettier/flat';
 import pluginVue from 'eslint-plugin-vue';
-import { globalIgnores } from 'eslint/config';
+import { defineConfig, globalIgnores } from 'eslint/config';
+import tseslint from 'typescript-eslint';
 
-export default defineConfigWithVueTs(
+export default defineConfig(
     globalIgnores(['vendor/**', 'node_modules/**', 'public/**', 'storage/**', 'bootstrap/**']),
+    tseslint.configs.strictTypeChecked,
     pluginVue.configs['flat/recommended'],
-    vueTsConfigs.strictTypeChecked,
+    {
+        files: ['**/*.{ts,vue}'],
+        languageOptions: {
+            parserOptions: {
+                // vue-eslint-parser passes <script lang="ts"> to typescript-eslint, with type information.
+                parser: tseslint.parser,
+                projectService: true,
+                tsconfigRootDir: import.meta.dirname,
+                extraFileExtensions: ['.vue'],
+            },
+        },
+    },
+    {
+        files: ['**/*.vue'],
+        rules: {
+            // The core-rule adjustments typescript-eslint makes for .ts files apply to components too.
+            ...tseslint.configs.eslintRecommended.rules,
+            'vue/block-lang': ['error', { script: { lang: 'ts' } }],
+        },
+    },
     {
         rules: {
             // Pages are named after their route (Home.vue, Notes/Index.vue).
             'vue/multi-word-component-names': 'off',
             '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+            // typescript-eslint sees imported .vue components with partly `any` types; vue-tsc
+            // (`npm run typecheck`) checks them fully.
+            '@typescript-eslint/no-unsafe-argument': 'off',
+            '@typescript-eslint/no-unsafe-assignment': 'off',
+            '@typescript-eslint/no-unsafe-call': 'off',
+            '@typescript-eslint/no-unsafe-member-access': 'off',
+            '@typescript-eslint/no-unsafe-return': 'off',
         },
+    },
+    {
+        files: ['**/*.js'],
+        extends: [tseslint.configs.disableTypeChecked],
     },
     // Formatting belongs to Prettier.
     prettier,

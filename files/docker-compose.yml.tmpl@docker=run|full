@@ -1,5 +1,5 @@
-# Reads the project's .env: COMPOSE_PROJECT_NAME names the containers, volumes and images; the
-# published ports are APP_PORT{% if choices.docker == "full" %}, VITE_PORT{% endif %}{% if choices.database != "sqlite" %} and FORWARD_DB_PORT{% endif %}; DOCKER_DATA selects where the {% if choices.database == "sqlite" %}SQLite database{% elif choices.database == "postgres" %}PostgreSQL data{% else %}MySQL data{% endif %}
+# Reads the project's .env: COMPOSE_PROJECT_NAME names the containers, volumes and images;
+# published ports: APP_PORT{% if choices.docker == "full" %}, VITE_PORT{% endif %}{% if choices.database != "sqlite" %}, FORWARD_DB_PORT{% endif %}; DOCKER_DATA selects where the {% if choices.database == "sqlite" %}SQLite database{% elif choices.database == "postgres" %}PostgreSQL data{% else %}MySQL data{% endif %}
 # is kept ("data" = a named volume, "./data" = the project's data/ folder).
 {%- if choices.docker == "full" %}
 # Everything runs in containers: `docker compose up dev` for development with hot reload,
@@ -90,6 +90,9 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+      # The first start creates the database files, which can take minutes in the project folder
+      # (DOCKER_DATA=./data) on a busy machine; failed checks until then do not count.
+      start_period: 3m
     restart: unless-stopped
 {%- elif choices.database == "mysql" %}
 
@@ -112,6 +115,9 @@ services:
       interval: 2s
       timeout: 5s
       retries: 60
+      # The first start creates the database files, which can take minutes in the project folder
+      # (DOCKER_DATA=./data) on a busy machine; failed checks until then do not count.
+      start_period: 3m
     restart: unless-stopped
 {%- endif %}
 
